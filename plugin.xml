@@ -460,7 +460,7 @@
       </array>
     </config-file>
 
-    <dependency id="com.googlemaps.ios" url="https://github.com/mapsplugin/cordova-plugin-googlemaps-sdk"  />
+    <dependency id="com.googlemaps.ios" url="https://github.com/4sh/squashed-cordova-plugin-googlemaps-ios-sdk#3.9.0"  />
 
 <!--
     <hook type="before_platform_add" src="src/ios/check_sdk_version.js"/>
