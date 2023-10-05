@@ -1,13 +1,13 @@
 # Cordova GoogleMaps plugin for Android, iOS and Browser v2.7.2
 
-This is a maintained fork of https://github.com/mapsplugin/cordova-plugin-googlemaps.
+This is a maintained fork of https://github.com/mapsplugin/cordova-plugin-googlemaps tested with `cordova-ios v6+`and `cordova-android v10+`.
 
-There's also [another repository](https://github.com/4sh/squashed-cordova-plugin-googlemaps) that contains only snapshot versions
+You might be interested in the https://github.com/4sh/squashed-cordova-plugin-googlemaps repository which contains only snapshot versions
 (commits were squashed to reduce history and improve installation time) currently used by multiple apps (some with 100k+ users) running in production.
 
 ## Release Notes
 
-   - **v2.7.2** (Oct 5, 2023)
+  - **v2.7.2** (Oct 5, 2023)
     - Fix: (iOS) Styles option is now taken into account before initializing the map (redraw is no longer needed when using a custom style)
 
   - **v2.7.1.3** (Dec 22, 2021)
