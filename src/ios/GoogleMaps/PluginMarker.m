@@ -73,7 +73,7 @@
     [createResult setObject:markerId forKey:@"__pgmId"];
 
     [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-      CDVCommandDelegateImpl *cmdDelegate = (CDVCommandDelegateImpl *)self.commandDelegate;
+      __weak __auto_type weakSelf = self;
       [self _create:markerId markerOptions:json callbackBlock:^(BOOL successed, id result) {
         CDVPluginResult* pluginResult;
 
