@@ -1,15 +1,19 @@
 package plugin.google.maps;
 
 import android.os.Bundle;
+import android.util.Xml;
 
 import org.apache.cordova.CallbackContext;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
@@ -17,15 +21,12 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-import za.co.twyst.tbxml.TBXML;
-
 
 public class PluginKmlOverlay extends MyPlugin implements MyPluginInterface {
   private HashMap<String, Bundle> styles = new HashMap<String, Bundle>();
 
   private enum KML_TAG {
     NOT_SUPPORTED,
-
     kml,
     style,
     styleurl,
@@ -115,59 +116,27 @@ public class PluginKmlOverlay extends MyPlugin implements MyPluginInterface {
   }
 
   private Bundle loadKml(String urlStr) {
-
     InputStream inputStream = getKmlContents(urlStr);
     if (inputStream == null) {
       return null;
     }
+    
     try {
-      // KMZ is not ready yet.... sorry
+      XmlPullParser parser = Xml.newPullParser();
+      parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
+      parser.setInput(inputStream, null);
 
-//      if (urlStr.contains(".kmz")) {
-//        String cacheDirPath = cordova.getActivity().getCacheDir() + "/" + Integer.toString(urlStr.hashCode(), 16);
-//        File cacheDir = new File(cacheDirPath);
-//        if (!cacheDir.exists()) {
-//          cacheDir.mkdirs();
-//        }
-//        ArrayList<File> files =  (PluginUtil.unpackZipFromBytes(inputStream, cacheDirPath));
-//        inputStream.close();
-//        for (File file : files) {
-//          if (file.getName().contains(".kml")) {
-//            inputStream = new FileInputStream(file);
-//            break;
-//          }
-//        }
-//      }
-
-
-      String line;
-      StringBuilder stringBuilder = new StringBuilder();
-      InputStreamReader inputStreamReader = new InputStreamReader(inputStream);
-      BufferedReader bufferedReader = new BufferedReader(inputStreamReader);
-      while ((line = bufferedReader.readLine()) != null) {
-        stringBuilder.append(line);
-        stringBuilder.append("\n");
-      }
-      bufferedReader.close();
-
-
-      TBXML tbxml = new TBXML();
-      tbxml.parse(stringBuilder.toString());
-
-      KmlParserClass parser = new KmlParserClass();
-      Bundle root = parser.parseXml(tbxml, tbxml.rootXMLElement());
+      KmlParserClass kmlParser = new KmlParserClass();
+      Bundle root = kmlParser.parseXml(parser);
+      
       Bundle result = new Bundle();
-      result.putBundle("schemas", parser.schemaHolder);
-      result.putBundle("styles", parser.styleHolder);
+      result.putBundle("schemas", kmlParser.schemaHolder);
+      result.putBundle("styles", kmlParser.styleHolder);
       result.putBundle("root", root);
 
-
-      tbxml.release();
-      inputStreamReader.close();
       inputStream.close();
-      inputStream = null;
       return result;
-    } catch (Exception e) {
+    } catch (XmlPullParserException | IOException e) {
       e.printStackTrace();
       return null;
     }
@@ -177,163 +146,200 @@ public class PluginKmlOverlay extends MyPlugin implements MyPluginInterface {
     public Bundle styleHolder = new Bundle();
     public Bundle schemaHolder = new Bundle();
 
-
-    private Bundle parseXml(TBXML tbxml, long rootElement) {
+    private Bundle parseXml(XmlPullParser parser) throws XmlPullParserException, IOException {
       Bundle result = new Bundle();
-      String styleId, schemaId, txt, attrName;
-      int i;
-      String tagName = tbxml.elementName(rootElement).toLowerCase();
-      long childNode;
-      Bundle styles, schema, extendedData;
-      ArrayList<Bundle> children;
-      ArrayList<String> styleIDs;
-
-      //Log.d(TAG, "--->tagName = " + tagName + "(" + rootElement + ")");
+      
+      // Skip to first START_TAG
+      int eventType = parser.getEventType();
+      while (eventType != XmlPullParser.START_TAG && eventType != XmlPullParser.END_DOCUMENT) {
+        eventType = parser.next();
+      }
+      
+      if (eventType == XmlPullParser.END_DOCUMENT) {
+        return result;
+      }
+      
+      return parseElement(parser);
+    }
+    
+    private Bundle parseElement(XmlPullParser parser) throws XmlPullParserException, IOException {
+      Bundle result = new Bundle();
+      String tagName = parser.getName().toLowerCase();
       result.putString("tagName", tagName);
-
-      KML_TAG kmlTag = null;
+      
+      KML_TAG kmlTag;
       try {
         kmlTag = KML_TAG.valueOf(tagName);
-      } catch(Exception e) {
+      } catch (Exception e) {
         kmlTag = KML_TAG.NOT_SUPPORTED;
       }
-
-      long[] attributes = tbxml.listAttributesOfElement(rootElement);
-      for (i = 0; i < attributes.length; i++) {
-        attrName = tbxml.attributeName(attributes[i]);
-        result.putString(attrName, tbxml.attributeValue(attributes[i]));
+      
+      // Parse attributes
+      int attributeCount = parser.getAttributeCount();
+      for (int i = 0; i < attributeCount; i++) {
+        String attrName = parser.getAttributeName(i);
+        String attrValue = parser.getAttributeValue(i);
+        result.putString(attrName, attrValue);
       }
-
-
+      
       switch (kmlTag) {
-
         case styleurl:
-          styleId = tbxml.textForElement(rootElement);
-          result.putString("styleId", styleId);
+          String styleUrl = parseTextContent(parser);
+          result.putString("styleId", styleUrl);
           break;
-
+          
         case stylemap:
         case style:
-
-          // Generate a style id for the tag
-          styleId = tbxml.valueOfAttributeNamed("id", rootElement);
-          if (styleId == null || styleId.isEmpty()) {
-            styleId = "__" + rootElement + "__";
-          }
-          result.putString("styleId", styleId);
-
-          // Store style information into the styleHolder.
-          styles = new Bundle();
-          children = new ArrayList<Bundle>();
-          childNode = tbxml.firstChild(rootElement);
-          while (childNode > 0) {
-            Bundle node = this.parseXml(tbxml, childNode);
-            if (node != null) {
-              if (node.containsKey("value")) {
-                styles.putString(node.getString("tagName"), node.getString("value"));
-              } else {
-                children.add(node);
-              }
-            }
-            childNode = tbxml.nextSibling(childNode);
-          }
-          if (children.size() > 0) {
-            styles.putParcelableArrayList("children", children);
-          }
-          styleHolder.putBundle(styleId, styles);
-
-
+          parseStyleElement(parser, result);
           break;
-
+          
         case schema:
-
-          // Generate a schema id for the tag
-          schemaId = tbxml.valueOfAttributeNamed("id", rootElement);
-          if (schemaId == null || schemaId.isEmpty()) {
-            schemaId = "__" + rootElement + "__";
-          }
-
-          // Store schema information into the schemaHolder.
-          schema = new Bundle();
-          schema.putString("name", tbxml.valueOfAttributeNamed("name", rootElement));
-          children = new ArrayList<Bundle>();
-          childNode = tbxml.firstChild(rootElement);
-          while (childNode > 0) {
-            Bundle node = this.parseXml(tbxml, childNode);
-            if (node != null) {
-              children.add(node);
-            }
-            childNode = tbxml.nextSibling(childNode);
-          }
-          if (children.size() > 0) {
-            schema.putParcelableArrayList("children", children);
-          }
-          schemaHolder.putBundle(schemaId, schema);
-
-
+          parseSchemaElement(parser, result);
           break;
+          
         case coordinates:
-
-
-          ArrayList<Bundle> latLngList = new ArrayList<Bundle>();
-
-          txt = tbxml.textForElement(rootElement);
-          txt = txt.replaceAll("\\s+", "\n");
-          txt = txt.replaceAll("\\n+", "\n");
-          String lines[] = txt.split("\n");
-          String tmpArry[];
-          Bundle latLng;
-          for (i = 0; i < lines.length; i++) {
-            lines[i] = lines[i].replaceAll("[^0-9,.\\-Ee]", "");
-            if (!"".equals(lines[i])) {
-              tmpArry = lines[i].split(",");
-              latLng = new Bundle();
-              latLng.putDouble("lat", Double.parseDouble(tmpArry[1]));
-              latLng.putDouble("lng", Double.parseDouble(tmpArry[0]));
-              latLngList.add(latLng);
-            }
-          }
-
-          result.putParcelableArrayList(tagName, latLngList);
+          parseCoordinatesElement(parser, result);
           break;
-
-
-
+          
         default:
-
-          childNode = tbxml.firstChild(rootElement);
-          if (childNode != 0) {
-            children = new ArrayList<Bundle>();
-            while (childNode != 0) {
-              Bundle node = this.parseXml(tbxml, childNode);
-              if (node != null) {
-                if (node.containsKey("styleId")) {
-                  //--------------------------------------------
-                  // writtin in JavaScript
-                  // result.styleIDs = result.styleIDs || [];
-                  // result.styleIDs.push(node.styleId);
-                  //--------------------------------------------
-                  styleIDs = result.getStringArrayList("styleIDs");
-                  if (styleIDs == null) {
-                    styleIDs = new ArrayList<String>();
-                  }
-                  styleIDs.add(node.getString("styleId"));
-                  result.putStringArrayList("styleIDs", styleIDs);
-                } else if (!("schema".equals(node.getString("tagName")))) {
-                  children.add(node);
-                }
-              }
-              childNode = tbxml.nextSibling(childNode);
-            }
-
-            result.putParcelableArrayList("children", children);
-          } else {
-            result.putString("value", tbxml.textForElement(rootElement));
-          }
+          parseGenericElement(parser, result, tagName);
           break;
       }
-
+      
       return result;
+    }
+    
+    private void parseStyleElement(XmlPullParser parser, Bundle result) throws XmlPullParserException, IOException {
+      String styleId = parser.getAttributeValue(null, "id");
+      if (styleId == null || styleId.isEmpty()) {
+        styleId = "__generated_" + System.currentTimeMillis() + "__";
+      }
+      result.putString("styleId", styleId);
+      
+      Bundle styles = new Bundle();
+      ArrayList<Bundle> children = new ArrayList<Bundle>();
+      
+      int eventType = parser.next();
+      while (eventType != XmlPullParser.END_TAG || !parser.getName().equals(result.getString("tagName"))) {
+        if (eventType == XmlPullParser.START_TAG) {
+          Bundle childNode = parseElement(parser);
+          if (childNode != null) {
+            if (childNode.containsKey("value")) {
+              styles.putString(childNode.getString("tagName"), childNode.getString("value"));
+            } else {
+              children.add(childNode);
+            }
+          }
+        }
+        eventType = parser.next();
+      }
+      
+      if (children.size() > 0) {
+        styles.putParcelableArrayList("children", children);
+      }
+      styleHolder.putBundle(styleId, styles);
+    }
+    
+    private void parseSchemaElement(XmlPullParser parser, Bundle result) throws XmlPullParserException, IOException {
+      String schemaId = parser.getAttributeValue(null, "id");
+      if (schemaId == null || schemaId.isEmpty()) {
+        schemaId = "__generated_" + System.currentTimeMillis() + "__";
+      }
+      
+      Bundle schema = new Bundle();
+      schema.putString("name", parser.getAttributeValue(null, "name"));
+      ArrayList<Bundle> children = new ArrayList<Bundle>();
+      
+      int eventType = parser.next();
+      while (eventType != XmlPullParser.END_TAG || !parser.getName().equals("schema")) {
+        if (eventType == XmlPullParser.START_TAG) {
+          Bundle childNode = parseElement(parser);
+          if (childNode != null) {
+            children.add(childNode);
+          }
+        }
+        eventType = parser.next();
+      }
+      
+      if (children.size() > 0) {
+        schema.putParcelableArrayList("children", children);
+      }
+      schemaHolder.putBundle(schemaId, schema);
+    }
+    
+    private void parseCoordinatesElement(XmlPullParser parser, Bundle result) throws XmlPullParserException, IOException {
+      String coordinatesText = parseTextContent(parser);
+      ArrayList<Bundle> latLngList = new ArrayList<Bundle>();
+      
+      coordinatesText = coordinatesText.replaceAll("\\s+", "\n");
+      coordinatesText = coordinatesText.replaceAll("\\n+", "\n");
+      String[] lines = coordinatesText.split("\n");
+      
+      for (String line : lines) {
+        line = line.replaceAll("[^0-9,.\\-Ee]", "");
+        if (!line.isEmpty()) {
+          String[] coords = line.split(",");
+          if (coords.length >= 2) {
+            Bundle latLng = new Bundle();
+            try {
+              latLng.putDouble("lat", Double.parseDouble(coords[1]));
+              latLng.putDouble("lng", Double.parseDouble(coords[0]));
+              latLngList.add(latLng);
+            } catch (NumberFormatException e) {
+              // Skip invalid coordinates
+            }
+          }
+        }
+      }
+      
+      result.putParcelableArrayList("coordinates", latLngList);
+    }
+    
+    private void parseGenericElement(XmlPullParser parser, Bundle result, String tagName) throws XmlPullParserException, IOException {
+      int eventType = parser.next();
+      ArrayList<Bundle> children = new ArrayList<Bundle>();
+      StringBuilder textContent = new StringBuilder();
+      
+      while (eventType != XmlPullParser.END_TAG || !parser.getName().equals(tagName)) {
+        if (eventType == XmlPullParser.START_TAG) {
+          Bundle childNode = parseElement(parser);
+          if (childNode != null) {
+            if (childNode.containsKey("styleId")) {
+              ArrayList<String> styleIDs = result.getStringArrayList("styleIDs");
+              if (styleIDs == null) {
+                styleIDs = new ArrayList<String>();
+              }
+              styleIDs.add(childNode.getString("styleId"));
+              result.putStringArrayList("styleIDs", styleIDs);
+            } else if (!"schema".equals(childNode.getString("tagName"))) {
+              children.add(childNode);
+            }
+          }
+        } else if (eventType == XmlPullParser.TEXT) {
+          textContent.append(parser.getText());
+        }
+        eventType = parser.next();
+      }
+      
+      if (children.size() > 0) {
+        result.putParcelableArrayList("children", children);
+      } else if (textContent.length() > 0) {
+        result.putString("value", textContent.toString().trim());
+      }
+    }
+    
+    private String parseTextContent(XmlPullParser parser) throws XmlPullParserException, IOException {
+      StringBuilder result = new StringBuilder();
+      int eventType = parser.next();
+      
+      while (eventType != XmlPullParser.END_TAG) {
+        if (eventType == XmlPullParser.TEXT) {
+          result.append(parser.getText());
+        }
+        eventType = parser.next();
+      }
+      
+      return result.toString().trim();
     }
   }
 
