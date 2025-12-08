@@ -6,6 +6,8 @@ You might be interested in the https://github.com/4sh/squashed-cordova-plugin-go
 (commits were squashed to reduce history and improve installation time) currently used by multiple apps (some with 200k+ downloads) running in production.
 
 ## Release Notes
+  - **v2.7.4** (Dec 08, 2025)
+    - Fix: (Android) Google Play’s 16 KB page size compatibility requirement
 
   - **v2.7.3** (Jul 25, 2024)
     - Fix: (iOS) Plugin is now compatible with `cordova-ios` 7+
