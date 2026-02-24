@@ -1,11 +1,27 @@
-# Cordova GoogleMaps plugin for Android, iOS and Browser v2.7.2
+# ⚠️ End of Life (EOL)
 
-This is a fork of https://github.com/mapsplugin/cordova-plugin-googlemaps.
+This repository is no longer maintained and has reached End of Life (EOL).
 
-You might be interested in the https://github.com/4sh/squashed-cordova-plugin-googlemaps repository which contains only snapshot versions
-(commits were squashed to reduce history and improve installation time) currently used by multiple apps (some with 200k+ downloads) running in production.
+No further updates, fixes, or compatibility patches will be provided.
+
+## Recommended alternative
+
+If you are still using Cordova and cannot migrate to a more modern solution (Capacitor, React Native, Flutter, or native development), we strongly recommend using:
+
+https://github.com/GitToTheHub/cordova-plugin-googlemaps-sdk
+
+This alternative is maintained and provides a more complete and up-to-date implementation of the Google Maps SDK for Cordova.
+
+## Background
+
+This is a fork of https://github.com/mapsplugin/cordova-plugin-googlemaps
+
+It was maintained to keep compatibility with older versions of Cordova, prior to `cordova-ios@8.0`
 
 ## Release Notes
+  - **EOL** (Feb, 2026)
+    - Due to new App Store requirements (apps must be built using Xcode 26 starting April 2026), maintaining compatibility would require significant architectural changes. As a result, this fork is now deprecated.
+
   - **v2.7.4** (Dec 08, 2025)
     - Fix: (Android) Google Play’s 16 KB page size compatibility requirement
 
